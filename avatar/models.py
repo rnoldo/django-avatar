@@ -12,19 +12,19 @@ from django.contrib.auth.models import User
 
 try:
     from cStringIO import StringIO
-    dir(StringIO) # Placate PyFlakes
+    dir(StringIO)  # Placate PyFlakes
 except ImportError:
     from StringIO import StringIO
 
 try:
     from PIL import Image
-    dir(Image) # Placate PyFlakes
+    dir(Image)  # Placate PyFlakes
 except ImportError:
     import Image
 
 from avatar.util import invalidate_cache
 from avatar.settings import (AVATAR_STORAGE_DIR, AVATAR_RESIZE_METHOD,
-                             AVATAR_MAX_AVATARS_PER_USER, AVATAR_THUMB_FORMAT,
+                             AVATAR_THUMB_FORMAT,
                              AVATAR_HASH_USERDIRNAMES, AVATAR_HASH_FILENAMES,
                              AVATAR_THUMB_QUALITY, AUTO_GENERATE_AVATAR_SIZES)
 
@@ -57,6 +57,7 @@ def avatar_file_path(instance=None, filename=None, size=None, ext=None):
     tmppath.append(os.path.basename(filename))
     return os.path.join(*tmppath)
 
+
 def find_extension(format):
     format = format.lower()
 
@@ -65,35 +66,32 @@ def find_extension(format):
 
     return format
 
+
 class Avatar(models.Model):
-    user = models.ForeignKey(User)
-    primary = models.BooleanField(default=False)
+    user = models.ForeignKey(User, unique=True)
     avatar = models.ImageField(max_length=1024, upload_to=avatar_file_path, blank=True)
     date_uploaded = models.DateTimeField(default=datetime.datetime.now)
-    
+
     def __unicode__(self):
         return _(u'Avatar for %s') % self.user
-    
+
     def save(self, *args, **kwargs):
-        avatars = Avatar.objects.filter(user=self.user)
-        if self.pk:
-            avatars = avatars.exclude(pk=self.pk)
-        if AVATAR_MAX_AVATARS_PER_USER > 1:
-            if self.primary:
-                avatars = avatars.filter(primary=True)
-                avatars.update(primary=False)
-        else:
-            avatars.delete()
+        try:
+            current = Avatar.objects.get(pk=self.pk)
+            if current.avatar != self.avatar:
+                current.avatar.delete()
+        except:
+            pass
         invalidate_cache(self.user)
         super(Avatar, self).save(*args, **kwargs)
-    
+
     def delete(self, *args, **kwargs):
         invalidate_cache(self.user)
         super(Avatar, self).delete(*args, **kwargs)
-    
+
     def thumbnail_exists(self, size):
         return self.avatar.storage.exists(self.avatar_name(size))
-    
+
     def create_thumbnail(self, size, quality=None):
         # invalidate the cache of the thumbnail with the given size first
         invalidate_cache(self.user, size)
@@ -101,7 +99,7 @@ class Avatar(models.Model):
             orig = self.avatar.storage.open(self.avatar.name, 'rb').read()
             image = Image.open(StringIO(orig))
         except IOError:
-            return # What should we do here?  Render a "sorry, didn't work" img?
+            return  # What should we do here?  Render a "sorry, didn't work" img?
         quality = quality or AVATAR_THUMB_QUALITY
         (w, h) = image.size
         if w != size or h != size:
@@ -123,7 +121,7 @@ class Avatar(models.Model):
 
     def avatar_url(self, size):
         return self.avatar.storage.url(self.avatar_name(size))
-    
+
     def avatar_name(self, size):
         ext = find_extension(AVATAR_THUMB_FORMAT)
         return avatar_file_path(
