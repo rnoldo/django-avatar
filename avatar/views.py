@@ -59,3 +59,34 @@ def add(request, extra_context=None, next_override=None,
             )
         )
 
+
+@login_required
+def add_qbox(request, extra_context=None, next_override=None,
+    upload_form=UploadAvatarForm, *args, **kwargs):
+    if extra_context is None:
+        extra_context = {}
+    avatar = Avatar.objects.get(user=request.user)
+    upload_avatar_form = upload_form(request.POST or None,
+        request.FILES or None, user=request.user)
+    if request.method == "POST" and 'avatar' in request.FILES:
+        if upload_avatar_form.is_valid():
+            image_file = request.FILES['avatar']
+            # storage的功能就体现在这里，当你save的时候，FileField自动调用storage的
+            # save方法，当调用FileField.delete()的时候，自动调用storage的delete方法
+            avatar.avatar.save(image_file.name, image_file)
+            avatar.save()
+            request.user.message_set.create(
+                message=_("Successfully uploaded a new avatar."))
+            avatar_updated.send(sender=Avatar, user=request.user, avatar=avatar)
+            return HttpResponseRedirect(next_override or _get_next(request))
+    return render_to_response(
+            'avatar/add.html',
+            extra_context,
+            context_instance=RequestContext(
+                request,
+                {'avatar': avatar,
+                 'upload_avatar_form': upload_avatar_form,
+                 'next': next_override or _get_next(request), }
+            )
+        )
+
